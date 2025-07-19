@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -38,6 +39,10 @@ func main() {
 	config := &SSHConfig{
 		ConfigPath: filepath.Join(os.Getenv("HOME"), ".gss"),
 		SSHConfig:  filepath.Join(os.Getenv("HOME"), ".ssh", "config"),
+	}
+	if runtime.GOOS == "windows" {
+		config.ConfigPath = filepath.Join(os.Getenv("USERPROFILE"), ".gss")
+		config.SSHConfig = filepath.Join(os.Getenv("USERPROFILE"), ".ssh", "config")
 	}
 
 	if err := os.MkdirAll(config.ConfigPath, 0700); err != nil {
