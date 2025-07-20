@@ -83,11 +83,11 @@ func main() {
 func usage() {
 	fmt.Printf("Usage: %s <command> [options]\n", os.Args[0])
 	fmt.Println("Commands:")
-	fmt.Println("  generate, gen  Generate a new SSH key pair")
-	fmt.Println("  import, i      Import an existing SSH key pair")
-	fmt.Println("  list, ls       List all SSH key pairs")
-	fmt.Println("  switch, s      Switch to an SSH key pair by index, or choose interactively")
-	fmt.Println("  delete, del    Delete an SSH key pair entry from config by index, or choose interactively")
+	fmt.Println("  generate, gen   Generate a new SSH key pair")
+	fmt.Println("  import, i       Import an existing SSH key pair")
+	fmt.Println("  list, ls        List all SSH key pairs")
+	fmt.Println("  switch, s       Switch to an SSH key pair by index, or choose interactively")
+	fmt.Println("  delete, del     Delete an SSH key pair entry from config by index, or choose interactively")
 	fmt.Println("\nUse '<command> -h' for more information on a command.")
 }
 
@@ -205,6 +205,46 @@ func switchCmd(config *SSHConfig) {
 	config.ActiveKey = chosenIndex
 	key := config.Keys[chosenIndex]
 
+	// --- Adjust private key permissions ---
+	privKeyPath := key.PrivateKeyPath
+	if _, err := os.Stat(privKeyPath); os.IsNotExist(err) {
+		fmt.Printf("Private key not found at: %s\n", privKeyPath)
+		os.Exit(1)
+	}
+
+	if runtime.GOOS == "windows" {
+		fmt.Printf("On Windows, you need to manually set permissions for your private key for security.\n")
+		fmt.Printf("Please run the following commands in an **Administrator Command Prompt (CMD)**:\n\n")
+
+		currentUser := os.Getenv("USERNAME")
+		if currentUser == "" {
+			fmt.Println("Error: USERNAME environment variable not set. Please manually determine your username.")
+			fmt.Println("The required commands will be displayed with a placeholder `YOUR_USERNAME`.")
+			currentUser = "YOUR_USERNAME" // Placeholder if username not found
+		}
+
+		// Output the /reset command
+		resetCmd := fmt.Sprintf("icacls \"%s\" /reset", privKeyPath)
+		fmt.Printf("1. **Reset permissions (removes all existing explicit permissions and re-enables inheritance):**\n")
+		fmt.Printf("   `%s`\n\n", resetCmd)
+
+		// Output the /grant command
+		grantCmd := fmt.Sprintf("icacls \"%s\" /inheritance:d /grant:r \"%s\":F", privKeyPath, currentUser)
+		fmt.Printf("2. **Set permissions (disable inheritance and grant Full Control only to your user):**\n")
+		fmt.Printf("   `%s`\n\n", grantCmd)
+
+		fmt.Printf("After running these commands, press Enter to continue...\n")
+		bufio.NewReader(os.Stdin).ReadBytes('\n') // Wait for user to press Enter
+
+	} else { // Linux/Unix
+		fmt.Printf("Adjusting permissions for private key (Linux/Unix): %s\n", privKeyPath)
+		if err := os.Chmod(privKeyPath, 0600); err != nil {
+			fmt.Printf("Failed to set private key permissions to 0600: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("Private key permissions set to 0600 on Linux/Unix.")
+	}
+
 	// --- SSH configuration ---
 	if err := os.MkdirAll(filepath.Dir(config.SSHConfig), 0700); err != nil {
 		fmt.Printf("Failed to create SSH config directory: %v\n", err)
@@ -212,10 +252,6 @@ func switchCmd(config *SSHConfig) {
 	}
 
 	fmt.Printf("Using IdentityFile: %s\n", key.PrivateKeyPath)
-	if _, err := os.Stat(key.PrivateKeyPath); os.IsNotExist(err) {
-		fmt.Printf("Private key not found at: %s\n", key.PrivateKeyPath)
-		os.Exit(1)
-	}
 
 	// Predefined configuration with dynamic IdentityFile
 	predefinedConfig := fmt.Sprintf("IdentityFile %s", key.PrivateKeyPath)
