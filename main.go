@@ -205,38 +205,14 @@ func switchCmd(config *SSHConfig) {
 	config.ActiveKey = chosenIndex
 	key := config.Keys[chosenIndex]
 
-	// --- Adjust private key permissions ---
+	// Adjust private key permissions for Linux/Unix
 	privKeyPath := key.PrivateKeyPath
 	if _, err := os.Stat(privKeyPath); os.IsNotExist(err) {
 		fmt.Printf("Private key not found at: %s\n", privKeyPath)
 		os.Exit(1)
 	}
 
-	if runtime.GOOS == "windows" {
-		fmt.Printf("On Windows, you need to manually set permissions for your private key for security.\n")
-		fmt.Printf("Please run the following commands in an **Administrator Command Prompt (CMD)**:\n\n")
-
-		currentUser := os.Getenv("USERNAME")
-		if currentUser == "" {
-			fmt.Println("Error: USERNAME environment variable not set. Please manually determine your username.")
-			fmt.Println("The required commands will be displayed with a placeholder `YOUR_USERNAME`.")
-			currentUser = "YOUR_USERNAME" // Placeholder if username not found
-		}
-
-		// Output the /reset command
-		resetCmd := fmt.Sprintf("icacls \"%s\" /reset", privKeyPath)
-		fmt.Printf("1. **Reset permissions (removes all existing explicit permissions and re-enables inheritance):**\n")
-		fmt.Printf("   `%s`\n\n", resetCmd)
-
-		// Output the /grant command
-		grantCmd := fmt.Sprintf("icacls \"%s\" /inheritance:d /grant:r \"%s\":F", privKeyPath, currentUser)
-		fmt.Printf("2. **Set permissions (disable inheritance and grant Full Control only to your user):**\n")
-		fmt.Printf("   `%s`\n\n", grantCmd)
-
-		fmt.Printf("After running these commands, press Enter to continue...\n")
-		bufio.NewReader(os.Stdin).ReadBytes('\n') // Wait for user to press Enter
-
-	} else { // Linux/Unix
+	if runtime.GOOS != "windows" { // Linux/Unix
 		fmt.Printf("Adjusting permissions for private key (Linux/Unix): %s\n", privKeyPath)
 		if err := os.Chmod(privKeyPath, 0600); err != nil {
 			fmt.Printf("Failed to set private key permissions to 0600: %v\n", err)
@@ -245,7 +221,7 @@ func switchCmd(config *SSHConfig) {
 		fmt.Println("Private key permissions set to 0600 on Linux/Unix.")
 	}
 
-	// --- SSH configuration ---
+	// SSH configuration
 	if err := os.MkdirAll(filepath.Dir(config.SSHConfig), 0700); err != nil {
 		fmt.Printf("Failed to create SSH config directory: %v\n", err)
 		os.Exit(1)
@@ -283,7 +259,7 @@ func switchCmd(config *SSHConfig) {
 	}
 	fmt.Printf("SSH key switched to: %s (%s)\n", key.Name, key.PrivateKeyPath)
 
-	// --- Git configuration ---
+	// Git configuration
 	var gitConfigFile string
 	switch strings.ToLower(*scope) {
 	case "local":
@@ -332,6 +308,31 @@ func switchCmd(config *SSHConfig) {
 	}
 
 	fmt.Printf("Successfully switched to key pair: %s (Index: %d).\n", key.Name, chosenIndex)
+
+	// Windows icacls instructions moved to the end
+	if runtime.GOOS == "windows" {
+		currentUser := os.Getenv("USERNAME")
+		if currentUser == "" {
+			currentUser = "YOUR_USERNAME" // Placeholder if username not found
+		}
+
+		fmt.Printf("\n--- Important: Manual Permissions Adjustment Required (Windows) ---\n")
+		fmt.Printf("Please run the following commands in an **Administrator Command Prompt (CMD)**:\n\n")
+
+		fmt.Printf(":: For your Private Key: %s\n", privKeyPath)
+		fmt.Printf("icacls \"%s\" /reset\n", privKeyPath)
+		fmt.Printf("icacls \"%s\" /grant:r \"%s\":F\n", privKeyPath, currentUser)
+		fmt.Printf("icacls \"%s\" /inheritance:r\n\n", privKeyPath)
+
+		sshConfigFilePath := config.SSHConfig
+		fmt.Printf(":: For your SSH Config File: %s\n", sshConfigFilePath)
+		fmt.Printf("icacls \"%s\" /reset\n", sshConfigFilePath)
+		fmt.Printf("icacls \"%s\" /grant:r \"%s\":F\n", sshConfigFilePath, currentUser)
+		fmt.Printf("icacls \"%s\" /inheritance:r\n\n", sshConfigFilePath)
+
+		fmt.Printf("After running these commands, press Enter to continue...\n")
+		bufio.NewReader(os.Stdin).ReadBytes('\n') // Wait for user to press Enter
+	}
 }
 
 func deleteCmd(config *SSHConfig) {
