@@ -35,14 +35,19 @@ type SSHConfig struct {
 	SSHConfig  string             `json:"-"` // Path to ~/.ssh/config
 }
 
+func getHomeDir() string {
+	if runtime.GOOS == "windows" {
+		fmt.Println("Windows", os.Getenv("USERPROFILE"))
+		return os.Getenv("USERPROFILE")
+	}
+	fmt.Println("Linux", os.Getenv("HOME"))
+	return os.Getenv("HOME")
+}
+
 func main() {
 	config := &SSHConfig{
-		ConfigPath: filepath.Join(os.Getenv("HOME"), ".gss"),
-		SSHConfig:  filepath.Join(os.Getenv("HOME"), ".ssh", "config"),
-	}
-	if runtime.GOOS == "windows" {
-		config.ConfigPath = filepath.Join(os.Getenv("USERPROFILE"), ".gss")
-		config.SSHConfig = filepath.Join(os.Getenv("USERPROFILE"), ".ssh", "config")
+		ConfigPath: filepath.Join(getHomeDir(), ".gss"),
+		SSHConfig:  filepath.Join(getHomeDir(), ".ssh", "config"),
 	}
 
 	if err := os.MkdirAll(config.ConfigPath, 0700); err != nil {
@@ -253,17 +258,17 @@ func switchCmd(config *SSHConfig) {
 			fmt.Printf("Local Git config not found at %s. Ensure you are in a Git repository if using local scope.\n", gitConfigFile)
 		}
 	case "global":
-		gitConfigFile = filepath.Join(os.Getenv("HOME"), ".gitconfig")
+		gitConfigFile = filepath.Join(getHomeDir(), ".gitconfig")
 	default:
 		fmt.Printf("Invalid scope: %s. Using 'global' Git configuration.\n", *scope)
-		gitConfigFile = filepath.Join(os.Getenv("HOME"), ".gitconfig")
+		gitConfigFile = filepath.Join(getHomeDir(), ".gitconfig")
 	}
 
 	if key.GitConfig == nil {
 		fmt.Println("No Git configuration defined for this key pair. Skipping Git config update.")
 	} else {
 		// Ensure core.sshCommand is set to use the GSS-managed SSH config
-		key.GitConfig["core.sshCommand"] = fmt.Sprintf("ssh -F %s", config.SSHConfig)
+		key.GitConfig["core.sshCommand"] = fmt.Sprintf("ssh -F %s", strings.ReplaceAll(config.SSHConfig, "\\", "/"))
 
 		// Apply git_config to the specified config file
 		for gitKey, gitValue := range key.GitConfig {
