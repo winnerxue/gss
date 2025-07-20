@@ -37,10 +37,8 @@ type SSHConfig struct {
 
 func getHomeDir() string {
 	if runtime.GOOS == "windows" {
-		fmt.Println("Windows", os.Getenv("USERPROFILE"))
 		return os.Getenv("USERPROFILE")
 	}
-	fmt.Println("Linux", os.Getenv("HOME"))
 	return os.Getenv("HOME")
 }
 
